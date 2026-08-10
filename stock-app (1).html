@@ -1,0 +1,1408 @@
+<!doctype html>
+<html lang="th" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบเช็คสต็อกก๋วยเตี๋ยวเรือ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    body { box-sizing: border-box; }
+    * { font-family: 'Sarabun', sans-serif; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .slide-in { animation: slideIn 0.3s ease-out; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+    .trend-up{ color:#ef4444; } .trend-down{ color:#22c55e; } .trend-neutral{ color:#6b7280; }
+    .qty-invalid{ border-color:#ef4444 !important; background: #fff1f2; }
+    .top-bar-btn{ background:white;box-shadow:0 2px 8px rgba(0,0,0,0.1);border-radius:10px; }
+    .modal-overlay{ position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:60;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 12px; }
+    .modal-box{ background:white;border-radius:16px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.25); }
+    .admin-tab{ padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer;color:#6b7280; }
+    .admin-tab.active{ background:#ea580c;color:white; }
+    .badge-check{ background:#dbeafe;color:#1d4ed8; }
+    .badge-movement{ background:#fef3c7;color:#b45309; }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+</head>
+
+<body class="h-full bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+  <div id="app" class="h-full w-full overflow-auto">
+
+    <!-- Top bar: admin (left) + language (right) -->
+    <div class="fixed top-4 left-4 z-50">
+      <button onclick="openAdminGate()" class="top-bar-btn w-10 h-10 flex items-center justify-center text-orange-700" title="แอดมิน">⚙️</button>
+    </div>
+    <div class="fixed top-4 right-4 z-50">
+      <select id="lang-select" onchange="setLanguage(this.value)" class="top-bar-btn px-3 py-2 text-sm font-medium text-orange-700 border-0 focus:outline-none">
+        <option value="th">ไทย</option>
+        <option value="en">English</option>
+        <option value="my">မြန်မာ</option>
+        <option value="lo">ລາວ</option>
+        <option value="km">ខ្មែរ</option>
+        <option value="vi">Tiếng Việt</option>
+      </select>
+    </div>
+
+    <!-- หน้าล็อกอิน -->
+    <div id="branch-page" class="min-h-full p-4 md:p-6 pt-20 hidden">
+      <div class="max-w-md mx-auto fade-in">
+        <h1 class="text-2xl font-bold text-orange-800 mb-2 text-center">🍜 ระบบเช็คสต็อก</h1>
+        <p class="text-gray-500 text-center mb-6 text-sm" data-t="loginPrompt">กรอกรหัสผ่านเพื่อเข้าใช้งาน</p>
+
+        <div id="login-box" class="bg-white rounded-2xl p-5 shadow-md">
+          <label class="block text-sm font-medium text-gray-700 mb-2" data-t="loginPasswordLabel">รหัสผ่าน</label>
+          <input id="login-password" type="password" onkeydown="if(event.key==='Enter') doLogin()" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl mb-3 focus:border-orange-500 focus:outline-none" placeholder="••••••••">
+          <button onclick="doLogin()" class="w-full bg-orange-500 text-white py-3 rounded-xl font-semibold hover:bg-orange-600" data-t="login">เข้าสู่ระบบ</button>
+        </div>
+
+        <div id="admin-branch-picker" class="hidden bg-white rounded-2xl p-5 shadow-md mt-4">
+          <p class="text-sm font-medium text-gray-700 mb-2" data-t="switchBranch">สลับสาขา</p>
+          <div id="admin-branch-picker-list" class="space-y-2"></div>
+        </div>
+
+        <div id="branch-first-run" class="hidden bg-white rounded-2xl p-5 shadow-md mt-4">
+          <p class="text-gray-600 mb-3 text-sm" data-t="setupFirstBranch">ยังไม่มีสาขาในระบบ ตั้งค่าสาขาแรก (ใช้รหัสผ่านแอดมิน)</p>
+          <input id="first-branch-name" type="text" placeholder="ชื่อสาขา เช่น สาขาหลัก" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl mb-3 focus:border-orange-500 focus:outline-none">
+          <input id="first-branch-staffpw" type="text" placeholder="รหัสผ่านประจำสาขา (ให้พนักงานใช้)" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl mb-3 focus:border-orange-500 focus:outline-none">
+          <input id="first-branch-adminpw" type="password" placeholder="รหัสผ่านแอดมิน" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl mb-3 focus:border-orange-500 focus:outline-none">
+          <button onclick="createFirstBranch()" class="w-full bg-orange-500 text-white py-3 rounded-xl font-semibold hover:bg-orange-600" data-t="createBranch">สร้างสาขา</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- หน้าหลัก -->
+    <div id="home-page" class="min-h-full p-4 md:p-6 pt-20 hidden">
+      <div class="max-w-lg mx-auto">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 id="shop-title" class="text-2xl md:text-3xl font-bold text-orange-800">🍜 ก๋วยเตี๋ยวเรือรสจนา</h1>
+            <p data-t="dailyCheck" class="text-orange-600 text-sm mt-1">เช็คสต็อกประจำวัน</p>
+            <button onclick="branchSwitchLabelClick()" id="branch-switch-label" class="text-xs text-gray-500 underline mt-1"></button>
+          </div>
+          <button onclick="showHistory()" class="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-md hover:shadow-lg transition-all text-orange-700 font-medium">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span data-t="history">ประวัติ</span>
+          </button>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 shadow-md mb-6">
+          <p data-t="date2" class="text-gray-500 text-sm">วันที่</p>
+          <p id="current-date" class="text-lg font-semibold text-gray-800"></p>
+        </div>
+
+        <div class="space-y-4">
+          <button onclick="selectCategory('หน้าเรือ')" class="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white p-5 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+            <div class="flex items-center gap-4">
+              <div class="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center text-3xl">🚣</div>
+              <div class="text-left">
+                <p class="text-xl font-bold" data-t-cat="หน้าเรือ">หน้าเรือ</p>
+                <p class="text-orange-100 text-sm" data-t="boatFrontDesc">เช็คสต็อกวัตถุดิบหน้าเรือ</p>
+              </div>
+              <svg class="w-6 h-6 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+            </div>
+          </button>
+
+          <button onclick="selectCategory('อาหารตามสั่ง')" class="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white p-5 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+            <div class="flex items-center gap-4">
+              <div class="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center text-3xl">🍳</div>
+              <div class="text-left">
+                <p class="text-xl font-bold" data-t-cat="อาหารตามสั่ง">อาหารตามสั่ง</p>
+                <p class="text-emerald-100 text-sm" data-t="customFoodDesc">เช็คสต็อกวัตถุดิบอาหารตามสั่ง</p>
+              </div>
+              <svg class="w-6 h-6 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+            </div>
+          </button>
+
+          <button onclick="selectCategory('เด็กเสิร์ฟ')" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white p-5 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+            <div class="flex items-center gap-4">
+              <div class="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center text-3xl">🧑‍🍳</div>
+              <div class="text-left">
+                <p class="text-xl font-bold" data-t-cat="เด็กเสิร์ฟ">เด็กเสิร์ฟ</p>
+                <p class="text-blue-100 text-sm" data-t="staffChildDesc">เช็คสต็อกอุปกรณ์เด็กเสิร์ฟ</p>
+              </div>
+              <svg class="w-6 h-6 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+            </div>
+          </button>
+
+          <button onclick="selectCategory('__movement__')" class="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white p-5 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+            <div class="flex items-center gap-4">
+              <div class="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center text-3xl">📦</div>
+              <div class="text-left">
+                <p class="text-xl font-bold" data-t="movement">ปรับสต็อค</p>
+                <p class="text-purple-100 text-sm" data-t="movementDesc">บันทึกรับเข้า / เบิกออก / ปรับยอด</p>
+              </div>
+              <svg class="w-6 h-6 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- หน้ากรอกชื่อ -->
+    <div id="name-page" class="min-h-full p-4 md:p-6 pt-20 hidden">
+      <div class="max-w-lg mx-auto fade-in">
+        <button onclick="goHome()" class="flex items-center gap-2 text-orange-700 mb-6 hover:text-orange-800 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+          <span data-t="backHome">กลับหน้าหลัก</span>
+        </button>
+        <div class="bg-white rounded-2xl p-6 shadow-lg">
+          <div id="category-badge" class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-sm font-medium mb-4"></div>
+          <h2 class="text-xl font-bold text-gray-800 mb-2" data-t="staffName">ผู้เช็คสต็อก</h2>
+          <p class="text-gray-500 mb-6" data-t="enterName">กรุณากรอกชื่อผู้ทำการเช็คสต็อก</p>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2" data-t="fullName">ชื่อ-นามสกุล</label>
+              <input type="text" id="checker-name" placeholder="กรอกชื่อของคุณ" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition-colors text-lg">
+            </div>
+            <button onclick="startChecking()" class="w-full bg-orange-500 text-white py-4 rounded-xl font-semibold text-lg hover:bg-orange-600 transition-colors shadow-md hover:shadow-lg" data-t="startChecking">เริ่มเช็คสต็อก</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- หน้าเช็คสต็อก -->
+    <div id="stock-page" class="min-h-full p-4 md:p-6 pt-20 hidden">
+      <div class="max-w-2xl mx-auto fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <button onclick="goToNamePage()" class="flex items-center gap-2 text-orange-700 hover:text-orange-800 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+            <span data-t="back">กลับ</span>
+          </button>
+          <div id="stock-category-badge" class="px-4 py-2 rounded-full text-white text-sm font-medium"></div>
+        </div>
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <div class="bg-gradient-to-r from-orange-500 to-orange-600 p-4 text-white">
+            <p class="text-sm opacity-90"><span data-t="staffChecker">ผู้เช็คสต็อก:</span> <span id="display-checker-name" class="font-semibold"></span></p>
+            <p class="text-sm opacity-90"><span data-t="date">วันที่:</span> <span id="display-date" class="font-semibold"></span></p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700" data-t="item">รายการ</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700 w-28" data-t="quantity">จำนวน</th>
+                  <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700 w-20" data-t="unit">หน่วย</th>
+                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700" data-t="note">หมายเหตุ</th>
+                </tr>
+              </thead>
+              <tbody id="stock-table-body" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+          <div class="p-4 bg-gray-50">
+            <button id="save-btn" onclick="saveStock()" class="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-4 rounded-xl font-semibold text-lg hover:from-green-600 hover:to-green-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+              <span data-t="save">บันทึกข้อมูล</span>
+            </button>
+            <p class="text-xs text-gray-500 mt-2">* ช่อง "จำนวน" ใส่ได้เฉพาะ 0-9 และสัญลักษณ์ . / + -</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- หน้าปรับสต็อค -->
+    <div id="movement-page" class="min-h-full p-4 md:p-6 pt-20 hidden">
+      <div class="max-w-2xl mx-auto fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <button onclick="goToNamePage()" class="flex items-center gap-2 text-orange-700 hover:text-orange-800 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+            <span data-t="back">กลับ</span>
+          </button>
+          <div class="px-4 py-2 rounded-full text-white text-sm font-medium bg-purple-500" data-t="movement">ปรับสต็อค</div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-lg p-5 mb-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1" data-t="chooseItem">เลือกสินค้า</label>
+              <select id="mv-item" class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none"></select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1" data-t="movementType">ประเภท</label>
+              <select id="mv-direction" class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none">
+                <option value="in" data-t="movementIn">รับเข้า</option>
+                <option value="out" data-t="movementOut">เบิกออก</option>
+                <option value="adjust" data-t="movementAdjust">ปรับยอด</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1" data-t="quantity">จำนวน</label>
+              <input id="mv-qty" type="text" inputmode="decimal" placeholder="0" class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1" data-t="unit">หน่วย</label>
+              <select id="mv-unit" class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none"></select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1" data-t="reason">เหตุผล/หมายเหตุ</label>
+            <input id="mv-reason" type="text" class="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none">
+          </div>
+          <button onclick="addMovementLine()" class="w-full bg-purple-500 text-white py-3 rounded-xl font-semibold hover:bg-purple-600" data-t="addLine">เพิ่มรายการ</button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <div class="p-4 bg-gray-50 border-b">
+            <p class="text-sm opacity-90"><span data-t="staffChecker">ผู้เช็คสต็อก:</span> <span id="mv-display-checker-name" class="font-semibold"></span></p>
+          </div>
+          <div id="mv-cart-list" class="divide-y divide-gray-100"></div>
+          <div class="p-4 bg-gray-50">
+            <button id="mv-save-btn" onclick="saveMovement()" class="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-4 rounded-xl font-semibold text-lg hover:from-green-600 hover:to-green-700 transition-all shadow-md hover:shadow-lg" data-t="save">บันทึกข้อมูล</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- หน้าประวัติ -->
+    <div id="history-page" class="min-h-full p-4 md:p-6 pt-20 hidden">
+      <div class="max-w-2xl mx-auto fade-in">
+        <button onclick="goHome()" class="flex items-center gap-2 text-orange-700 mb-6 hover:text-orange-800 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+          <span data-t="backHome">กลับหน้าหลัก</span>
+        </button>
+        <h2 class="text-2xl font-bold text-gray-800 mb-4" data-t="historyTitle">📋 ประวัติการเช็คสต็อก</h2>
+        <div class="bg-white rounded-2xl p-4 shadow-md mb-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2" data-t="selectDate">เลือกวันที่</label>
+              <input type="date" id="filter-date" onchange="filterHistory()" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition-colors">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2" data-t="category">หมวดหมู่</label>
+              <select id="filter-category" onchange="filterHistory()" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition-colors">
+                <option value="" data-t="all">ทั้งหมด</option>
+                <option value="หน้าเรือ">หน้าเรือ</option>
+                <option value="อาหารตามสั่ง">อาหารตามสั่ง</option>
+                <option value="เด็กเสิร์ฟ">เด็กเสิร์ฟ</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div id="history-list" class="space-y-4"></div>
+        <div id="no-history" class="hidden text-center py-12">
+          <div class="text-6xl mb-4">📭</div>
+          <p data-t="noHistory" class="text-gray-500">ไม่พบประวัติการเช็คสต็อก</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- หน้ารายละเอียดประวัติ -->
+    <div id="history-detail-page" class="min-h-full p-4 md:p-6 pt-20 hidden">
+      <div class="max-w-2xl mx-auto fade-in">
+        <button onclick="showHistory()" class="flex items-center gap-2 text-orange-700 mb-6 hover:text-orange-800 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+          <span data-t="backHistory">กลับหน้าประวัติ</span>
+        </button>
+        <div id="history-detail-content" class="bg-white rounded-2xl shadow-lg overflow-hidden"></div>
+      </div>
+    </div>
+
+    <!-- Admin modal -->
+    <div id="admin-gate-modal" class="modal-overlay hidden">
+      <div class="modal-box p-6 mt-24">
+        <h3 class="text-lg font-bold text-gray-800 mb-3" data-t="adminPasswordPrompt">กรอกรหัสผ่านแอดมิน</h3>
+        <input id="admin-password-input" type="password" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl mb-3 focus:border-orange-500 focus:outline-none">
+        <div class="flex gap-2">
+          <button onclick="submitAdminLogin()" class="flex-1 bg-orange-500 text-white py-3 rounded-xl font-semibold">ตกลง</button>
+          <button onclick="closeAdminGate()" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold" data-t="cancel">ยกเลิก</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="admin-modal" class="modal-overlay hidden">
+      <div class="modal-box p-5 mt-10 mb-10">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-xl font-bold text-gray-800" data-t="admin">แอดมิน</h3>
+          <button onclick="closeAdminModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="flex gap-2 mb-4 flex-wrap">
+          <div class="admin-tab active" data-tab="items" onclick="switchAdminTab('items')" data-t="manageItems">จัดการรายการสินค้า</div>
+          <div class="admin-tab" data-tab="branches" onclick="switchAdminTab('branches')" data-t="manageBranches">จัดการสาขา</div>
+          <div class="admin-tab" data-tab="translations" onclick="switchAdminTab('translations')" data-t="manageTranslations">จัดการคำแปล</div>
+        </div>
+        <div id="admin-tab-items"></div>
+        <div id="admin-tab-branches" class="hidden"></div>
+        <div id="admin-tab-translations" class="hidden"></div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg hidden transition-all duration-300 flex items-center gap-2 z-50 max-w-[90vw]">
+      <span id="toast-message">บันทึกสำเร็จ!</span>
+    </div>
+  </div>
+
+<script>
+/* =========================================================
+   ตั้งค่า
+   ========================================================= */
+const GOOGLE_SHEET_WEBAPP_URL = "แปะ URL ของ Apps Script Web App ตรงนี้";
+
+/* =========================================================
+   ข้อความ UI (ต้นฉบับภาษาไทย - ใช้ตอนยังไม่มีคำแปล / lang=th)
+   ========================================================= */
+const UI_TH = {
+  dailyCheck:'เช็คสต็อกประจำวัน', history:'ประวัติ', boatFrontDesc:'เช็คสต็อกวัตถุดิบหน้าเรือ',
+  customFoodDesc:'เช็คสต็อกวัตถุดิบอาหารตามสั่ง', staffChildDesc:'เช็คสต็อกอุปกรณ์เด็กเสิร์ฟ',
+  backHome:'กลับหน้าหลัก', staffName:'ผู้เช็คสต็อก', enterName:'กรุณากรอกชื่อผู้ทำการเช็คสต็อก',
+  fullName:'ชื่อ-นามสกุล', startChecking:'เริ่มเช็คสต็อก', item:'รายการ', quantity:'จำนวน', unit:'หน่วย',
+  note:'หมายเหตุ', save:'บันทึกข้อมูล', historyTitle:'ประวัติการเช็คสต็อก', selectDate:'เลือกวันที่',
+  category:'หมวดหมู่', all:'ทั้งหมด', staffChecker:'ผู้เช็คสต็อก:', date:'วันที่:', date2:'วันที่',
+  noHistory:'ไม่พบประวัติการเช็คสต็อก', saved:'บันทึกข้อมูลสำเร็จ!', error:'เกิดข้อผิดพลาด กรุณาลองใหม่',
+  fullLimit:'ไม่สามารถบันทึกได้ ข้อมูลเต็มแล้ว', enterName2:'กรุณากรอกชื่อ', back:'กลับ', backHistory:'กลับหน้าประวัติ',
+  compared:'เปรียบเทียบกับ', increased:'เพิ่มขึ้น', decreased:'ลดลง', noChange:'ไม่เปลี่ยนแปลง',
+  changeLabel:'เปลี่ยนแปลง', changePctLabel:'เทียบเป็น %', noPrevious:'ไม่มีรอบก่อนหน้า', invalidQty:'รูปแบบจำนวนไม่ถูกต้อง',
+  selectBranch:'เลือกสาขา', loginPrompt:'กรอกรหัสผ่านเพื่อเข้าใช้งาน', loginPasswordLabel:'รหัสผ่าน', login:'เข้าสู่ระบบ',
+  logout:'ออกจากระบบ', switchBranch:'สลับสาขา', setupFirstBranch:'ยังไม่มีสาขาในระบบ ตั้งค่าสาขาแรก (ใช้รหัสผ่านแอดมิน)',
+  branchNameLabel:'ชื่อสาขา', branchPasswordLabel:'รหัสผ่านประจำสาขา (ให้พนักงานใช้)', createBranch:'สร้างสาขา',
+  scopeGlobal:'ส่วนกลาง (ทุกสาขา)', scopeLabel:'ขอบเขต',
+  movement:'ปรับสต็อค', movementDesc:'บันทึกรับเข้า / เบิกออก / ปรับยอด',
+  movementIn:'รับเข้า', movementOut:'เบิกออก', movementAdjust:'ปรับยอด', reason:'เหตุผล/หมายเหตุ',
+  addLine:'เพิ่มรายการ', chooseItem:'เลือกสินค้า', admin:'แอดมิน', adminPasswordPrompt:'กรอกรหัสผ่านแอดมิน',
+  wrongPassword:'รหัสผ่านไม่ถูกต้อง', manageItems:'จัดการรายการสินค้า', manageBranches:'จัดการสาขา',
+  manageTranslations:'จัดการคำแปล', addItem:'เพิ่มรายการสินค้า', edit:'แก้ไข', delete:'ลบ',
+  confirmDelete:'ยืนยันการลบรายการนี้?', addBranch:'เพิ่มสาขา', branchName:'ชื่อสาขา',
+  refreshTranslation:'อัปเดตคำแปลด้วย AI', translating:'กำลังแปล...', editRecord:'แก้ไขรายการนี้',
+  saveEdit:'บันทึกการแก้ไข', cancel:'ยกเลิก', seedItems:'นำเข้ารายการเริ่มต้น', saveOk:'บันทึกสำเร็จ',
+  movementType:'ประเภท', movementHistory:'รายการปรับสต็อค', editedNote:'แก้ไขล่าสุดโดย'
+};
+const CAT_TH = { 'หน้าเรือ':'หน้าเรือ', 'อาหารตามสั่ง':'อาหารตามสั่ง', 'เด็กเสิร์ฟ':'เด็กเสิร์ฟ' };
+
+/* รายการเริ่มต้น (ใช้ตอน "นำเข้ารายการเริ่มต้น" ครั้งแรกเท่านั้น ไม่ได้ใช้เป็นแหล่งข้อมูลหลักอีกต่อไป) */
+const SEED_ITEMS = [
+/* ...รายการเดิมจากระบบเก่า... */
+];
+// หมายเหตุ: ใส่รายการ seed แบบเต็มไว้ด้านล่างสุดของไฟล์ (SEED_ITEMS_FULL) เพื่อความกระชับของส่วนหัว
+
+/* =========================================================
+   state
+   ========================================================= */
+let currentLanguage = localStorage.getItem('lang') || 'th';
+let currentBranchId = localStorage.getItem('branch_id') || '';
+let branches = [];
+let catalogFlat = [];        // รายการสินค้าดิบจากเซิร์ฟเวอร์
+let catalogByCategory = {};  // จัดกลุ่มตามหมวด (รวม header)
+let ITEM_META_BY_NAME = {};
+let dict = { ui:{}, items:{}, units:{}, categories:{} };
+let allRecords = [];
+let currentCategory = '';
+let checkerName = '';
+let movementCart = [];
+let adminPassword = sessionStorage.getItem('admin_pw') || '';
+window.__currentDetailRecordId = null;
+
+/* =========================================================
+   Network helpers (JSONP GET / no-cors POST)
+   ========================================================= */
+function jsonpGet(action, params) {
+  return new Promise((resolve, reject) => {
+    if (!GOOGLE_SHEET_WEBAPP_URL || GOOGLE_SHEET_WEBAPP_URL.startsWith('แปะ')) { reject(new Error('NO_URL')); return; }
+    const cb = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*10000);
+    const qs = new URLSearchParams({ action, callback: cb, ...(params||{}) }).toString();
+    const script = document.createElement('script');
+    script.src = GOOGLE_SHEET_WEBAPP_URL + '?' + qs;
+    let done = false;
+    window[cb] = function(data) {
+      done = true;
+      try { delete window[cb]; } catch(e){ window[cb] = undefined; }
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(data);
+    };
+    script.onerror = function() {
+      if (script.parentNode) script.parentNode.removeChild(script);
+      reject(new Error('JSONP_FAILED'));
+    };
+    document.body.appendChild(script);
+    setTimeout(() => { if (!done) reject(new Error('TIMEOUT')); }, 20000);
+  });
+}
+
+function postNoCors(payload) {
+  return fetch(GOOGLE_SHEET_WEBAPP_URL, {
+    method: 'POST', mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+}
+
+/* =========================================================
+   Translation helpers
+   ========================================================= */
+function t(key) {
+  if (currentLanguage === 'th' || !dict.ui[key]) return UI_TH[key] || key;
+  return dict.ui[key];
+}
+function tItem(name) {
+  if (currentLanguage === 'th') return name;
+  return (dict.items && dict.items[name]) || name;
+}
+function tUnit(unit) {
+  if (currentLanguage === 'th' || !unit) return unit || '';
+  return (dict.units && dict.units[unit]) || unit;
+}
+function tCategory(cat) {
+  if (currentLanguage === 'th') return cat;
+  return (dict.categories && dict.categories[cat]) || cat;
+}
+
+function applyStaticTranslations() {
+  document.querySelectorAll('[data-t]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-t'));
+  });
+  document.querySelectorAll('[data-t-cat]').forEach(el => {
+    el.textContent = tCategory(el.getAttribute('data-t-cat'));
+  });
+}
+
+async function loadDictionaryFor(lang) {
+  if (lang === 'th') { dict = { ui:{}, items:{}, units:{}, categories:{} }; return; }
+  try {
+    const res = await jsonpGet('getDictionary', { lang });
+    if (res && res.ok) dict = res.dict;
+  } catch (e) {
+    console.warn('loadDictionary failed', e);
+  }
+}
+
+async function setLanguage(lang) {
+  currentLanguage = lang;
+  localStorage.setItem('lang', lang);
+  document.getElementById('lang-select').value = lang;
+  await loadDictionaryFor(lang);
+  applyStaticTranslations();
+  rerenderVisiblePages();
+}
+
+/* =========================================================
+   Catalog helpers (เดิมจากระบบเก่า ปรับให้อ่านจาก catalogFlat)
+   ========================================================= */
+function getUnitOptions_(unitStr) {
+  const u = String(unitStr || '').trim();
+  if (u.includes('/')) return u.split('/').map(s => s.trim()).filter(Boolean);
+  return null;
+}
+
+function buildCatalog_() {
+  catalogByCategory = {};
+  ITEM_META_BY_NAME = {};
+  const sorted = [...catalogFlat].sort((a,b) => (a.category||'').localeCompare(b.category||'') || (Number(a.sort_order)||0) - (Number(b.sort_order)||0));
+  sorted.forEach(it => {
+    if (!catalogByCategory[it.category]) catalogByCategory[it.category] = [];
+    catalogByCategory[it.category].push(it);
+    if (String(it.is_header) !== 'TRUE') {
+      ITEM_META_BY_NAME[it.name] = { defaultUnit: it.unit || '', category: it.category };
+    }
+  });
+}
+
+async function loadCatalog() {
+  try {
+    const res = await jsonpGet('listItems', { branch_id: currentBranchId });
+    if (res && res.ok) { catalogFlat = res.items || []; buildCatalog_(); }
+  } catch (e) { console.warn('loadCatalog failed', e); }
+}
+
+function normalizeQtyToBase_(qty, unitSelected, unitOptions) {
+  const n = Number(qty);
+  if (!isFinite(n)) return { qty: NaN, unit: String(unitSelected||'').trim() };
+  const u = String(unitSelected||'').trim();
+  const opts = (unitOptions||[]).map(x => String(x||'').trim());
+  if (opts.includes('กรัม') && opts.includes('กิโลกรัม')) {
+    if (u === 'กรัม') return { qty: n/1000, unit: 'กิโลกรัม' };
+    return { qty: n, unit: 'กิโลกรัม' };
+  }
+  if (opts.includes('ขวด') && opts.includes('ลัง')) {
+    if (u === 'ลัง') return { qty: n*24, unit: 'ขวด' };
+    return { qty: n, unit: 'ขวด' };
+  }
+  if (opts.includes('ขวด') && opts.includes('แพ็ค')) {
+    if (u === 'แพ็ค') return { qty: n*12, unit: 'ขวด' };
+    return { qty: n, unit: 'ขวด' };
+  }
+  return { qty: n, unit: u };
+}
+
+function fmtQty(v) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  if (!isFinite(n)) return String(v);
+  let s = n.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  return s;
+}
+
+function getComparableQty_(it) {
+  if (it && typeof it.quantity_base === 'number' && isFinite(it.quantity_base)) return it.quantity_base;
+  return Number(it?.quantity ?? NaN);
+}
+
+const QTY_ALLOWED_RE = /[0-9.\-+\/]/;
+function sanitizeQuantityRaw_(raw) {
+  let out = '';
+  for (const ch of String(raw||'')) if (QTY_ALLOWED_RE.test(ch)) out += ch;
+  return out.replace(/(?!^)[+-]/g, '');
+}
+function parseQuantity_(raw) {
+  const s = String(raw||'').trim();
+  if (!s) return { ok:true, value:0 };
+  if (/^[+-]?\d*(?:\.\d+)?$/.test(s)) {
+    const v = Number(s);
+    return Number.isFinite(v) ? { ok:true, value:v } : { ok:false, value:0 };
+  }
+  const m = s.match(/^([+-]?\d*(?:\.\d+)?)\s*\/\s*(\d*(?:\.\d+)?)$/);
+  if (m) {
+    const a = Number(m[1]), b = Number(m[2]);
+    if (!m[1] || m[1]==='+' || m[1]==='-' || !m[2] || !Number.isFinite(a) || !Number.isFinite(b) || b===0) return { ok:false, value:0 };
+    return { ok:true, value:a/b };
+  }
+  return { ok:false, value:0 };
+}
+function onQtyKeyDown_(e) {
+  const ctrl = ['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End','Enter'];
+  if (ctrl.includes(e.key) || e.ctrlKey || e.metaKey) return;
+  if (!QTY_ALLOWED_RE.test(e.key)) e.preventDefault();
+}
+function sanitizeQuantityInput(el) {
+  const before = el.value, after = sanitizeQuantityRaw_(before);
+  if (before !== after) el.value = after;
+  const p = parseQuantity_(el.value);
+  el.classList.toggle('qty-invalid', !p.ok && el.value.trim() !== '');
+}
+
+/* =========================================================
+   Login / Branches
+   ========================================================= */
+let currentBranchName = localStorage.getItem('branch_name') || '';
+let currentRole = localStorage.getItem('role') || '';
+
+function showBranchPage() {
+  showPage('branch-page');
+  document.getElementById('login-box').classList.remove('hidden');
+  document.getElementById('admin-branch-picker').classList.add('hidden');
+  document.getElementById('branch-first-run').classList.add('hidden');
+  checkFirstRun();
+}
+
+async function checkFirstRun() {
+  try {
+    const res = await jsonpGet('hasBranches', {});
+    if (res && res.ok && !res.hasBranches) {
+      document.getElementById('login-box').classList.add('hidden');
+      document.getElementById('branch-first-run').classList.remove('hidden');
+    }
+  } catch (e) { /* ถ้าเช็คไม่ได้ ให้ผู้ใช้ล็อกอินตามปกติ */ }
+}
+
+async function createFirstBranch() {
+  const name = document.getElementById('first-branch-name').value.trim();
+  const staffPw = document.getElementById('first-branch-staffpw').value.trim();
+  const adminPw = document.getElementById('first-branch-adminpw').value;
+  if (!name || !staffPw || !adminPw) { showToast('กรุณากรอกข้อมูลให้ครบ', 'error'); return; }
+  try {
+    const res = await jsonpGet('addBranch', { password: adminPw, name, staff_password: staffPw });
+    if (res && res.ok) {
+      branches = res.branches;
+      adminPassword = adminPw;
+      sessionStorage.setItem('admin_pw', adminPw);
+      await enterAsAdmin(branches[branches.length - 1].id);
+    } else {
+      showToast(t('wrongPassword'), 'error');
+    }
+  } catch (e) { showToast(t('error'), 'error'); }
+}
+
+async function doLogin() {
+  const pw = document.getElementById('login-password').value;
+  if (!pw) return;
+  try {
+    const res = await jsonpGet('unlock', { password: pw });
+    if (!res || !res.ok) { showToast(t('wrongPassword'), 'error'); return; }
+    if (res.role === 'admin') {
+      adminPassword = pw;
+      sessionStorage.setItem('admin_pw', pw);
+      branches = res.branches || [];
+      if (!branches.length) { showToast('ยังไม่มีสาขา กรุณาสร้างสาขาก่อน', 'error'); return; }
+      document.getElementById('login-box').classList.add('hidden');
+      const pickerList = document.getElementById('admin-branch-picker-list');
+      pickerList.innerHTML = branches.map(b => `
+        <button onclick="enterAsAdmin('${b.id}')" class="w-full bg-gray-50 hover:bg-orange-50 p-3 rounded-xl flex items-center justify-between text-left">
+          <span class="font-medium text-gray-800">${b.name}</span>
+          <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </button>`).join('');
+      document.getElementById('admin-branch-picker').classList.remove('hidden');
+    } else {
+      currentRole = 'staff';
+      currentBranchId = res.branch.id;
+      currentBranchName = res.branch.name;
+      localStorage.setItem('role', 'staff');
+      localStorage.setItem('branch_id', currentBranchId);
+      localStorage.setItem('branch_name', currentBranchName);
+      await bootAfterBranchSelected();
+      goHome();
+    }
+  } catch (e) { showToast(t('error'), 'error'); }
+}
+
+async function enterAsAdmin(branchId) {
+  currentRole = 'admin';
+  currentBranchId = branchId;
+  const b = branches.find(x => x.id === branchId);
+  currentBranchName = b ? b.name : '';
+  localStorage.setItem('role', 'admin');
+  localStorage.setItem('branch_id', currentBranchId);
+  localStorage.setItem('branch_name', currentBranchName);
+  await bootAfterBranchSelected();
+  goHome();
+}
+
+function logout() {
+  localStorage.removeItem('role');
+  localStorage.removeItem('branch_id');
+  localStorage.removeItem('branch_name');
+  sessionStorage.removeItem('admin_pw');
+  adminPassword = '';
+  currentBranchId = '';
+  currentRole = '';
+  document.getElementById('login-password').value = '';
+  showBranchPage();
+}
+
+async function branchSwitchLabelClick() {
+  if (currentRole !== 'admin') { logout(); return; }
+  showPage('branch-page');
+  document.getElementById('login-box').classList.add('hidden');
+  document.getElementById('branch-first-run').classList.add('hidden');
+  if (!branches.length) {
+    try { const r = await jsonpGet('listBranches', { password: adminPassword }); if (r && r.ok) branches = r.branches; } catch(e){}
+  }
+  const pickerList = document.getElementById('admin-branch-picker-list');
+  pickerList.innerHTML = branches.map(b => `
+    <button onclick="enterAsAdmin('${b.id}')" class="w-full bg-gray-50 hover:bg-orange-50 p-3 rounded-xl flex items-center justify-between text-left">
+      <span class="font-medium text-gray-800">${b.name}</span>
+      <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+    </button>`).join('') + `<button onclick="logout()" class="w-full text-center text-red-500 text-sm py-2">${t('logout')}</button>`;
+  document.getElementById('admin-branch-picker').classList.remove('hidden');
+}
+
+function updateBranchSwitchLabel() {
+  const el = document.getElementById('branch-switch-label');
+  if (!el) return;
+  const label = currentRole === 'admin' ? t('switchBranch') : t('logout');
+  el.textContent = currentBranchName ? ('📍 ' + currentBranchName + ' · ' + label) : '';
+}
+
+/* =========================================================
+   Page navigation
+   ========================================================= */
+function showPage(pageId) {
+  ['branch-page','home-page','name-page','stock-page','movement-page','history-page','history-detail-page'].forEach(p => document.getElementById(p).classList.add('hidden'));
+  document.getElementById(pageId).classList.remove('hidden');
+}
+function goHome() { showPage('home-page'); }
+function goToNamePage() { showPage('name-page'); }
+
+function rerenderVisiblePages() {
+  try {
+    if (!document.getElementById('stock-page').classList.contains('hidden')) renderStockTable();
+    if (!document.getElementById('history-page').classList.contains('hidden')) renderHistory();
+    if (!document.getElementById('history-detail-page').classList.contains('hidden') && window.__currentDetailRecordId) showHistoryDetail(window.__currentDetailRecordId);
+    updateBranchSwitchLabel();
+  } catch(e) {}
+}
+
+/* =========================================================
+   หน้าเช็คสต็อกประจำวัน
+   ========================================================= */
+function selectCategory(category) {
+  currentCategory = category;
+  const badge = document.getElementById('category-badge');
+  const colors = { 'หน้าเรือ':'bg-orange-500', 'อาหารตามสั่ง':'bg-emerald-500', 'เด็กเสิร์ฟ':'bg-blue-500', '__movement__':'bg-purple-500' };
+  const icons = { 'หน้าเรือ':'🚣', 'อาหารตามสั่ง':'🍳', 'เด็กเสิร์ฟ':'🧑‍🍳', '__movement__':'📦' };
+  badge.className = `inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-sm font-medium mb-4 ${colors[category]}`;
+  badge.innerHTML = `${icons[category]} ${category==='__movement__' ? t('movement') : tCategory(category)}`;
+  document.getElementById('checker-name').value = '';
+  showPage('name-page');
+}
+
+function startChecking() {
+  const name = document.getElementById('checker-name').value.trim();
+  if (!name) {
+    document.getElementById('checker-name').classList.add('border-red-500');
+    document.getElementById('checker-name').placeholder = t('enterName2');
+    return;
+  }
+  document.getElementById('checker-name').classList.remove('border-red-500');
+  checkerName = name;
+
+  if (currentCategory === '__movement__') {
+    document.getElementById('mv-display-checker-name').textContent = checkerName;
+    movementCart = [];
+    renderMovementItemSelect();
+    renderMovementCart();
+    showPage('movement-page');
+    return;
+  }
+
+  document.getElementById('display-checker-name').textContent = checkerName;
+  document.getElementById('display-date').textContent = formatDate(new Date(), currentLanguage);
+  const badge = document.getElementById('stock-category-badge');
+  const colors = { 'หน้าเรือ':'bg-orange-500', 'อาหารตามสั่ง':'bg-emerald-500', 'เด็กเสิร์ฟ':'bg-blue-500' };
+  badge.className = `px-4 py-2 rounded-full text-white text-sm font-medium ${colors[currentCategory]}`;
+  badge.textContent = tCategory(currentCategory);
+  renderStockTable();
+  showPage('stock-page');
+}
+
+function renderStockTable() {
+  const tbody = document.getElementById('stock-table-body');
+  const items = catalogByCategory[currentCategory] || [];
+  let html = '', index = 0;
+  items.forEach(item => {
+    if (String(item.is_header) === 'TRUE') {
+      if (html !== '') html += '<tr><td colspan="4" class="h-1"></td></tr>';
+      html += `<tr class="bg-gray-100"><td colspan="4" class="px-4 py-3 font-bold text-gray-700 text-base">${tItem(item.name)}</td></tr>`;
+      return;
+    }
+    const unitOptions = getUnitOptions_(item.unit) || [item.unit || ''];
+    let unitHtml = '';
+    if (!item.unit) unitHtml = '';
+    else if (unitOptions.length > 1) {
+      unitHtml = `<select class="w-24 px-2 py-1 border border-gray-300 rounded-lg text-sm bg-white" data-item="${item.name}" data-field="unit">
+        ${unitOptions.map(u => `<option value="${u}">${tUnit(u)}</option>`).join('')}
+      </select>`;
+    } else {
+      unitHtml = `<span class="text-gray-600">${tUnit(unitOptions[0])}</span>`;
+    }
+    html += `
+      <tr class="slide-in hover:bg-orange-50 transition-colors" style="animation-delay:${index*20}ms">
+        <td class="px-4 py-3"><span class="font-medium text-gray-800">${tItem(item.name)}</span></td>
+        <td class="px-4 py-3">
+          <input type="text" inputmode="decimal" autocomplete="off" data-item="${item.name}" data-field="quantity_raw" placeholder="0"
+            onkeydown="onQtyKeyDown_(event)" oninput="sanitizeQuantityInput(this)"
+            class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-center focus:border-orange-500 focus:outline-none transition-colors text-lg font-medium">
+        </td>
+        <td class="px-4 py-3 text-center text-gray-600 font-medium">${unitHtml}</td>
+        <td class="px-4 py-3">
+          <input type="text" data-item="${item.name}" data-field="note" placeholder="-"
+            class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-orange-500 focus:outline-none">
+        </td>
+      </tr>`;
+    index++;
+  });
+  tbody.innerHTML = html;
+}
+
+async function saveStock() {
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  try {
+    const items = catalogByCategory[currentCategory] || [];
+    const missingEls = [], invalidEls = [];
+    const stockEntries = items.filter(it => String(it.is_header) !== 'TRUE').map(item => {
+      const qtyEl = document.querySelector(`input[data-item="${item.name}"][data-field="quantity_raw"]`);
+      const noteEl = document.querySelector(`input[data-item="${item.name}"][data-field="note"]`);
+      const raw = qtyEl ? qtyEl.value.trim() : '';
+      const parsed = parseQuantity_(raw);
+      if (qtyEl && raw === '') missingEls.push(qtyEl);
+      else if (qtyEl && !parsed.ok) invalidEls.push(qtyEl);
+      const unitSelectEl = document.querySelector(`select[data-item="${item.name}"][data-field="unit"]`);
+      const unitInput = unitSelectEl ? unitSelectEl.value : (item.unit || '');
+      const unitOptions = getUnitOptions_(item.unit) || [String(item.unit||'').trim()];
+      const norm = normalizeQtyToBase_(parsed.ok ? parsed.value : 0, unitInput, unitOptions);
+      return { name:item.name, unit:norm.unit, quantity:norm.qty, quantity_base:norm.qty, note: noteEl ? noteEl.value.trim() : '' };
+    });
+
+    if (missingEls.length) { missingEls[0].scrollIntoView({behavior:'smooth',block:'center'}); showToast('กรุณากรอกจำนวนให้ครบทุกช่อง', 'error'); return; }
+    if (invalidEls.length) { invalidEls[0].scrollIntoView({behavior:'smooth',block:'center'}); showToast(t('invalidQty'), 'error'); return; }
+
+    await postNoCors({ action:'create', branch_id: currentBranchId, type:'check', category: currentCategory, checker_name: checkerName, date: new Date().toISOString(), items: stockEntries });
+    showToast(t('saved'), 'success');
+    setTimeout(() => { goHome(); syncHistory(); }, 800);
+  } catch (err) {
+    console.error(err);
+    showToast(t('error'), 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* =========================================================
+   หน้าปรับสต็อค (รับเข้า/เบิกออก/ปรับยอด)
+   ========================================================= */
+function renderMovementItemSelect() {
+  const sel = document.getElementById('mv-item');
+  let html = '';
+  Object.keys(catalogByCategory).forEach(cat => {
+    const items = (catalogByCategory[cat]||[]).filter(it => String(it.is_header) !== 'TRUE');
+    if (!items.length) return;
+    html += `<optgroup label="${tCategory(cat)}">`;
+    items.forEach(it => { html += `<option value="${it.name}">${tItem(it.name)}</option>`; });
+    html += `</optgroup>`;
+  });
+  sel.innerHTML = html;
+  updateMovementUnitOptions();
+  sel.onchange = updateMovementUnitOptions;
+}
+function updateMovementUnitOptions() {
+  const name = document.getElementById('mv-item').value;
+  const meta = ITEM_META_BY_NAME[name];
+  const opts = (meta && getUnitOptions_(meta.defaultUnit)) || [(meta && meta.defaultUnit) || ''];
+  document.getElementById('mv-unit').innerHTML = opts.map(u => `<option value="${u}">${tUnit(u)}</option>`).join('');
+}
+function addMovementLine() {
+  const name = document.getElementById('mv-item').value;
+  const direction = document.getElementById('mv-direction').value;
+  const rawQty = document.getElementById('mv-qty').value.trim();
+  const unit = document.getElementById('mv-unit').value;
+  const reason = document.getElementById('mv-reason').value.trim();
+  const parsed = parseQuantity_(rawQty);
+  if (!name || !parsed.ok || rawQty === '') { showToast(t('invalidQty'), 'error'); return; }
+  movementCart.push({ name, direction, quantity: parsed.value, unit, reason });
+  document.getElementById('mv-qty').value = '';
+  document.getElementById('mv-reason').value = '';
+  renderMovementCart();
+}
+function removeMovementLine(idx) { movementCart.splice(idx,1); renderMovementCart(); }
+function renderMovementCart() {
+  const el = document.getElementById('mv-cart-list');
+  const dirLabel = { in:t('movementIn'), out:t('movementOut'), adjust:t('movementAdjust') };
+  const dirColor = { in:'text-green-600', out:'text-red-600', adjust:'text-blue-600' };
+  if (!movementCart.length) { el.innerHTML = `<div class="p-4 text-center text-gray-400 text-sm">— ยังไม่มีรายการ —</div>`; return; }
+  el.innerHTML = movementCart.map((m, idx) => `
+    <div class="flex items-center justify-between px-4 py-3">
+      <div>
+        <p class="font-medium text-gray-800">${tItem(m.name)} <span class="${dirColor[m.direction]} font-semibold">(${dirLabel[m.direction]})</span></p>
+        <p class="text-sm text-gray-500">${fmtQty(m.quantity)} ${tUnit(m.unit)} ${m.reason ? '· ' + m.reason : ''}</p>
+      </div>
+      <button onclick="removeMovementLine(${idx})" class="text-red-500 text-sm font-medium">${t('delete')}</button>
+    </div>
+  `).join('');
+}
+async function saveMovement() {
+  if (!movementCart.length) { showToast('กรุณาเพิ่มอย่างน้อย 1 รายการ', 'error'); return; }
+  const btn = document.getElementById('mv-save-btn');
+  btn.disabled = true;
+  try {
+    await postNoCors({ action:'createMovement', branch_id: currentBranchId, category:'ปรับสต็อค', checker_name: checkerName, date: new Date().toISOString(), entries: movementCart });
+    showToast(t('saved'), 'success');
+    setTimeout(() => { goHome(); syncHistory(); }, 800);
+  } catch (e) {
+    showToast(t('error'), 'error');
+  } finally { btn.disabled = false; }
+}
+
+/* =========================================================
+   ประวัติ
+   ========================================================= */
+async function syncHistory() {
+  try {
+    const res = await jsonpGet('list', { branch_id: currentBranchId });
+    if (res && res.ok) allRecords = res.records || [];
+  } catch (e) { console.warn('syncHistory failed', e); }
+}
+async function showHistory() {
+  showPage('history-page');
+  document.getElementById('history-list').innerHTML = `<div class="bg-white rounded-xl p-4 shadow-md text-center text-gray-500">กำลังโหลด...</div>`;
+  await syncHistory();
+  renderHistory();
+}
+function filterHistory() { renderHistory(); }
+function formatDate(date, lang) {
+  const opt = { day:'2-digit', month:'2-digit', year:'numeric' };
+  return new Date(date).toLocaleDateString('en-GB', opt);
+}
+function formatFullDate(date, lang) {
+  const opt = { weekday:'short', day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' };
+  return new Date(date).toLocaleDateString('en-GB', opt);
+}
+function renderHistory() {
+  const filterDate = document.getElementById('filter-date').value;
+  const filterCategory = document.getElementById('filter-category').value;
+  let filtered = [...allRecords];
+  if (filterDate) filtered = filtered.filter(r => String(r.date||'').slice(0,10) === filterDate);
+  if (filterCategory) filtered = filtered.filter(r => r.category === filterCategory);
+  filtered.sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
+  const listEl = document.getElementById('history-list');
+  const noHistory = document.getElementById('no-history');
+  if (!filtered.length) { listEl.innerHTML=''; noHistory.classList.remove('hidden'); return; }
+  noHistory.classList.add('hidden');
+  const colors = { 'หน้าเรือ':'from-orange-500 to-orange-600', 'อาหารตามสั่ง':'from-emerald-500 to-emerald-600', 'เด็กเสิร์ฟ':'from-blue-500 to-blue-600', 'ปรับสต็อค':'from-purple-500 to-purple-600' };
+  const icons = { 'หน้าเรือ':'🚣', 'อาหารตามสั่ง':'🍳', 'เด็กเสิร์ฟ':'🧑‍🍳', 'ปรับสต็อค':'📦' };
+  listEl.innerHTML = filtered.map(record => `
+    <div onclick="showHistoryDetail('${record.id}')" class="bg-white rounded-xl p-4 shadow-md hover:shadow-lg transition-all cursor-pointer">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 bg-gradient-to-br ${colors[record.category]||'from-gray-400 to-gray-500'} rounded-xl flex items-center justify-center text-2xl">${icons[record.category]||'📦'}</div>
+        <div class="flex-1">
+          <p class="font-semibold text-gray-800">${record.type==='movement' ? t('movement') : tCategory(record.category)}
+            <span class="ml-2 text-xs px-2 py-0.5 rounded-full ${record.type==='movement' ? 'badge-movement' : 'badge-check'}">${record.type==='movement' ? t('movement') : t('dailyCheck')}</span>
+          </p>
+          <p class="text-sm text-gray-500">${t('staffChecker')} ${record.checker_name}</p>
+          <p class="text-sm text-gray-400">${formatFullDate(record.date, currentLanguage)}</p>
+        </div>
+        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      </div>
+    </div>
+  `).join('');
+}
+
+function getPreviousRecord(category, currentDate) {
+  const curr = currentDate ? new Date(currentDate).getTime() : null;
+  const filtered = allRecords.filter(r => r.category === category && r.type !== 'movement').sort((a,b) => new Date(b.date)-new Date(a.date));
+  if (!filtered.length) return null;
+  if (!curr) return filtered.length > 1 ? filtered[1] : null;
+  return filtered.find(r => new Date(r.date).getTime() < curr) || null;
+}
+function getItemFromRecord(record, itemName) {
+  const items = JSON.parse(record.items || '[]');
+  return items.find(i => i.name === itemName);
+}
+
+function showHistoryDetail(id) {
+  const record = allRecords.find(r => String(r.id) === String(id));
+  if (!record) return;
+  window.__currentDetailRecordId = id;
+  let items = [];
+  try { items = JSON.parse(record.items || '[]'); } catch(e) { items = []; }
+
+  const colors = { 'หน้าเรือ':'from-orange-500 to-orange-600', 'อาหารตามสั่ง':'from-emerald-500 to-emerald-600', 'เด็กเสิร์ฟ':'from-blue-500 to-blue-600', 'ปรับสต็อค':'from-purple-500 to-purple-600' };
+  const content = document.getElementById('history-detail-content');
+
+  if (record.type === 'movement') {
+    const dirLabel = { in:t('movementIn'), out:t('movementOut'), adjust:t('movementAdjust') };
+    const dirColor = { in:'text-green-600', out:'text-red-600', adjust:'text-blue-600' };
+    content.innerHTML = `
+      <div class="bg-gradient-to-r ${colors['ปรับสต็อค']} p-4 text-white">
+        <h3 class="text-xl font-bold mb-2">${t('movement')}</h3>
+        <p class="text-sm opacity-90">${t('staffChecker')} <span class="font-semibold">${record.checker_name}</span></p>
+        <p class="text-sm opacity-90">${t('date')} <span class="font-semibold">${formatFullDate(record.date, currentLanguage)}</span></p>
+      </div>
+      <div class="divide-y divide-gray-100">
+        ${items.map(it => `
+          <div class="px-4 py-3 flex items-center justify-between">
+            <div>
+              <p class="font-medium text-gray-800">${tItem(it.name)} <span class="${dirColor[it.direction]} font-semibold text-sm">(${dirLabel[it.direction]})</span></p>
+              <p class="text-sm text-gray-500">${it.reason || '-'}</p>
+            </div>
+            <p class="font-semibold text-gray-700">${fmtQty(it.quantity)} ${tUnit(it.unit)}</p>
+          </div>
+        `).join('')}
+      </div>`;
+    showPage('history-detail-page');
+    return;
+  }
+
+  const previousRecord = getPreviousRecord(record.category, record.date);
+  const editButtonHtml = adminPassword ? `<button onclick="toggleEditMode()" class="text-sm bg-white/20 px-3 py-1.5 rounded-lg" >${t('editRecord')}</button>` : '';
+
+  content.innerHTML = `
+    <div class="bg-gradient-to-r ${colors[record.category]||'from-gray-400 to-gray-500'} p-4 text-white flex items-center justify-between">
+      <div>
+        <h3 class="text-xl font-bold mb-2">${tCategory(record.category)}</h3>
+        <p class="text-sm opacity-90">${t('staffChecker')} <span class="font-semibold">${record.checker_name}</span></p>
+        <p class="text-sm opacity-90">${t('date')} <span class="font-semibold">${formatFullDate(record.date, currentLanguage)}</span></p>
+      </div>
+      ${editButtonHtml}
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead class="bg-gray-50"><tr>
+          <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">${t('item')}</th>
+          <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">${t('quantity')}</th>
+          <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">${t('unit')}</th>
+          ${previousRecord ? `<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">${t('compared')}</th><th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">${t('changeLabel')}</th>` : ''}
+          <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">${t('note')}</th>
+          <th class="px-4 py-3 w-10"></th>
+        </tr></thead>
+        <tbody class="divide-y divide-gray-100">
+          ${items.map(item => {
+            let comparison = '';
+            if (previousRecord) {
+              const prevItem = getItemFromRecord(previousRecord, item.name);
+              if (prevItem) {
+                const diff = getComparableQty_(item) - getComparableQty_(prevItem);
+                const trend = diff > 0 ? `<span class="trend-up">⬆ +${fmtQty(diff)}</span>` : diff < 0 ? `<span class="trend-down">⬇ ${fmtQty(diff)}</span>` : `<span class="trend-neutral">- ${t('noChange')}</span>`;
+                comparison = `<td class="px-4 py-3 text-center font-semibold text-gray-600">${fmtQty(prevItem.quantity)} ${tUnit(prevItem.unit)}</td><td class="px-4 py-3 text-center font-semibold">${trend}</td>`;
+              } else {
+                comparison = `<td class="px-4 py-3 text-center text-gray-400">-</td><td class="px-4 py-3 text-center"><span class="text-xs text-blue-600">${t('noPrevious')}</span></td>`;
+              }
+            }
+            return `
+              <tr class="hover:bg-gray-50" data-row-item="${item.name}">
+                <td class="px-4 py-3 font-medium text-gray-800">${tItem(item.name)}</td>
+                <td class="px-4 py-3 text-center font-semibold view-qty">${fmtQty(item.quantity)}</td>
+                <td class="px-4 py-3 text-center text-gray-600">${tUnit(item.unit)}</td>
+                ${comparison}
+                <td class="px-4 py-3 text-gray-500">${item.note || '-'}</td>
+                <td class="px-4 py-3 edit-cell"></td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  showPage('history-detail-page');
+}
+
+function toggleEditMode() {
+  const rows = document.querySelectorAll('#history-detail-content tr[data-row-item]');
+  rows.forEach(row => {
+    const cell = row.querySelector('.edit-cell');
+    const qtyCell = row.querySelector('.view-qty');
+    if (cell.querySelector('input')) return; // already editing
+    const currentVal = qtyCell.textContent.trim();
+    qtyCell.innerHTML = `<input type="text" value="${currentVal}" class="w-20 px-2 py-1 border-2 border-orange-300 rounded-lg text-center" data-edit-qty>`;
+    cell.innerHTML = `<button class="text-green-600 text-sm font-semibold" onclick="saveEditedItem('${row.getAttribute('data-row-item')}', this)">${t('saveEdit')}</button>`;
+  });
+}
+
+async function saveEditedItem(itemName, btn) {
+  const row = btn.closest('tr');
+  const input = row.querySelector('[data-edit-qty]');
+  const parsed = parseQuantity_(input.value);
+  if (!parsed.ok) { showToast(t('invalidQty'), 'error'); return; }
+  try {
+    const record = allRecords.find(r => String(r.id) === String(window.__currentDetailRecordId));
+    const res = await jsonpGet('updateItemInRecord', {
+      password: adminPassword, branch_id: currentBranchId, kind: (record && record.type === 'movement') ? 'movement' : 'check',
+      record_id: window.__currentDetailRecordId, item_name: itemName, quantity: parsed.value, editor_name: checkerName || 'admin'
+    });
+    if (res && res.ok) {
+      showToast(t('saveOk'), 'success');
+      await syncHistory();
+      showHistoryDetail(window.__currentDetailRecordId);
+    } else {
+      showToast(t('wrongPassword'), 'error');
+    }
+  } catch (e) { showToast(t('error'), 'error'); }
+}
+
+/* =========================================================
+   Admin
+   ========================================================= */
+function openAdminGate() {
+  if (adminPassword) { openAdminModal(); return; }
+  document.getElementById('admin-gate-modal').classList.remove('hidden');
+}
+function closeAdminGate() { document.getElementById('admin-gate-modal').classList.add('hidden'); }
+async function submitAdminLogin() {
+  const pw = document.getElementById('admin-password-input').value;
+  try {
+    const res = await jsonpGet('unlock', { password: pw });
+    if (res && res.ok && res.role === 'admin') {
+      adminPassword = pw;
+      sessionStorage.setItem('admin_pw', pw);
+      currentRole = 'admin';
+      localStorage.setItem('role', 'admin');
+      closeAdminGate();
+      openAdminModal();
+    } else {
+      showToast(t('wrongPassword'), 'error');
+    }
+  } catch (e) { showToast(t('error'), 'error'); }
+}
+function openAdminModal() {
+  document.getElementById('admin-modal').classList.remove('hidden');
+  switchAdminTab('items');
+}
+function closeAdminModal() { document.getElementById('admin-modal').classList.add('hidden'); }
+
+function switchAdminTab(tab) {
+  document.querySelectorAll('.admin-tab').forEach(el => el.classList.toggle('active', el.getAttribute('data-tab')===tab));
+  document.getElementById('admin-tab-items').classList.toggle('hidden', tab!=='items');
+  document.getElementById('admin-tab-branches').classList.toggle('hidden', tab!=='branches');
+  document.getElementById('admin-tab-translations').classList.toggle('hidden', tab!=='translations');
+  if (tab==='items') renderAdminItemsTab();
+  if (tab==='branches') renderAdminBranchesTab();
+  if (tab==='translations') renderAdminTranslationsTab();
+}
+
+let adminItemScope = ''; // '' = ส่วนกลาง, otherwise branchId
+let adminScopeItems = [];
+
+async function renderAdminItemsTab() {
+  const el = document.getElementById('admin-tab-items');
+  if (!branches.length) {
+    try { const r = await jsonpGet('listBranches', { password: adminPassword }); if (r && r.ok) branches = r.branches; } catch(e){}
+  }
+  const cats = Object.keys(catalogByCategory);
+  el.innerHTML = `<div class="text-center text-gray-400 text-sm py-4">กำลังโหลด...</div>`;
+  try {
+    const res = await jsonpGet('listItemsAdmin', { password: adminPassword, scope: adminItemScope });
+    adminScopeItems = (res && res.ok) ? res.items : [];
+  } catch (e) { adminScopeItems = []; }
+
+  const scopeOptions = [`<option value="">${t('scopeGlobal')}</option>`]
+    .concat(branches.map(b => `<option value="${b.id}" ${adminItemScope===b.id?'selected':''}>${b.name}</option>`)).join('');
+
+  let seedBtn = catalogFlat.length === 0 ? `<button onclick="runSeedItems()" class="mb-3 w-full bg-amber-500 text-white py-2 rounded-lg font-semibold">${t('seedItems')}</button>` : '';
+
+  let html = seedBtn + `
+    <div class="mb-3">
+      <label class="block text-sm font-medium text-gray-700 mb-1">${t('scopeLabel')}</label>
+      <select id="admin-item-scope" onchange="onAdminScopeChange()" class="w-full px-3 py-2 border rounded-lg text-sm">${scopeOptions}</select>
+      <p class="text-xs text-gray-400 mt-1">รายการ "เฉพาะสาขา" ที่ชื่อซ้ำกับส่วนกลาง จะทับ (override) ของส่วนกลางเฉพาะสาขานั้น</p>
+    </div>
+    <div class="bg-gray-50 rounded-xl p-3 mb-4">
+      <p class="text-sm font-semibold text-gray-700 mb-2">${t('addItem')}</p>
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <input id="new-item-category" list="cat-list" placeholder="หมวดหมู่" class="px-3 py-2 border rounded-lg text-sm">
+        <datalist id="cat-list">${cats.map(c=>`<option value="${c}">`).join('')}</datalist>
+        <input id="new-item-name" placeholder="ชื่อสินค้า" class="px-3 py-2 border rounded-lg text-sm">
+        <input id="new-item-unit" placeholder="หน่วย (เช่น กิโลกรัม หรือ กรัม/กิโลกรัม)" class="px-3 py-2 border rounded-lg text-sm">
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="new-item-header"> เป็นหัวข้อหมวดย่อย</label>
+      </div>
+      <button onclick="submitNewItem()" class="w-full bg-orange-500 text-white py-2 rounded-lg text-sm font-semibold">${t('addItem')}</button>
+    </div>
+    <div>
+  `;
+  const byCat = {};
+  adminScopeItems.forEach(it => { (byCat[it.category] = byCat[it.category] || []).push(it); });
+  Object.keys(byCat).forEach(cat => {
+    html += `<div class="mb-3"><p class="font-bold text-gray-700 mb-1">${cat}</p>`;
+    byCat[cat].forEach(it => {
+      html += `<div class="flex items-center justify-between text-sm py-1.5 border-b border-gray-100">
+        <span class="${String(it.is_header)==='TRUE' ? 'font-semibold' : ''}">${it.name} ${it.unit ? '· '+it.unit : ''}</span>
+        <button onclick="removeItem('${it.id}')" class="text-red-500 text-xs">${t('delete')}</button>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  html += `</div>`;
+  el.innerHTML = html;
+}
+function onAdminScopeChange() {
+  adminItemScope = document.getElementById('admin-item-scope').value;
+  renderAdminItemsTab();
+}
+async function submitNewItem() {
+  const category = document.getElementById('new-item-category').value.trim();
+  const name = document.getElementById('new-item-name').value.trim();
+  const unit = document.getElementById('new-item-unit').value.trim();
+  const isHeader = document.getElementById('new-item-header').checked;
+  if (!category || !name) { showToast('กรอกหมวดหมู่และชื่อสินค้า', 'error'); return; }
+  try {
+    const res = await jsonpGet('saveItem', { password: adminPassword, category, name, unit, is_header: isHeader ? 'TRUE':'FALSE', branch_id: adminItemScope });
+    if (res && res.ok) { await loadCatalog(); renderAdminItemsTab(); showToast(t('saveOk'),'success'); }
+    else showToast(t('wrongPassword'),'error');
+  } catch(e){ showToast(t('error'),'error'); }
+}
+async function removeItem(id) {
+  if (!confirm(t('confirmDelete'))) return;
+  try {
+    const res = await jsonpGet('deleteItem', { password: adminPassword, id });
+    if (res && res.ok) { await loadCatalog(); renderAdminItemsTab(); }
+    else showToast(t('wrongPassword'),'error');
+  } catch(e){ showToast(t('error'),'error'); }
+}
+async function runSeedItems() {
+  const chunks = [];
+  for (let i=0;i<SEED_ITEMS_FULL.length;i+=15) chunks.push(SEED_ITEMS_FULL.slice(i,i+15));
+  for (let i=0;i<chunks.length;i++) {
+    showToast(`กำลังนำเข้า... ${i+1}/${chunks.length}`, 'success');
+    try {
+      await jsonpGet('bulkSeedItems', { password: adminPassword, branch_id:'', items: JSON.stringify(chunks[i]) });
+    } catch(e) { console.warn('seed chunk failed', e); }
+  }
+  await loadCatalog();
+  renderAdminItemsTab();
+  showToast(t('saveOk'), 'success');
+}
+
+async function renderAdminBranchesTab() {
+  const el = document.getElementById('admin-tab-branches');
+  el.innerHTML = `<div class="text-center text-gray-400 text-sm py-4">กำลังโหลด...</div>`;
+  try {
+    const res = await jsonpGet('listBranches', { password: adminPassword });
+    if (res && res.ok) branches = res.branches;
+  } catch (e) {}
+  el.innerHTML = `
+    <div class="bg-gray-50 rounded-xl p-3 mb-4">
+      <p class="text-sm font-semibold text-gray-700 mb-2">${t('addBranch')}</p>
+      <input id="new-branch-name" placeholder="${t('branchNameLabel')}" class="w-full px-3 py-2 border rounded-lg text-sm mb-2">
+      <input id="new-branch-staffpw" placeholder="${t('branchPasswordLabel')}" class="w-full px-3 py-2 border rounded-lg text-sm mb-2">
+      <button onclick="submitNewBranch()" class="w-full bg-orange-500 text-white py-2 rounded-lg text-sm font-semibold">${t('addBranch')}</button>
+    </div>
+    <div>${branches.map(b => `<div class="text-sm py-1.5 border-b border-gray-100 flex justify-between"><span>${b.name}</span><span class="text-gray-400 text-xs">รหัสสาขา: ${b.staff_password || '-'}</span></div>`).join('')}</div>
+  `;
+}
+async function submitNewBranch() {
+  const name = document.getElementById('new-branch-name').value.trim();
+  const staffPw = document.getElementById('new-branch-staffpw').value.trim();
+  if (!name || !staffPw) { showToast('กรอกชื่อสาขาและรหัสผ่านสาขา', 'error'); return; }
+  try {
+    const res = await jsonpGet('addBranch', { password: adminPassword, name, staff_password: staffPw });
+    if (res && res.ok) { branches = res.branches; renderAdminBranchesTab(); showToast(t('saveOk'),'success'); }
+    else showToast(t('wrongPassword'),'error');
+  } catch(e){ showToast(t('error'),'error'); }
+}
+
+function renderAdminTranslationsTab() {
+  const el = document.getElementById('admin-tab-translations');
+  const langs = [ ['en','English'], ['my','မြန်မာ'], ['lo','ລາວ'], ['km','ខ្មែរ'], ['vi','Tiếng Việt'] ];
+  el.innerHTML = langs.map(([code,label]) => `
+    <div class="flex items-center justify-between py-2 border-b border-gray-100">
+      <span class="font-medium text-gray-700">${label}</span>
+      <button onclick="runTranslateAll('${code}')" id="translate-btn-${code}" class="text-sm bg-orange-500 text-white px-3 py-1.5 rounded-lg">${t('refreshTranslation')}</button>
+    </div>
+  `).join('');
+}
+async function runTranslateAll(lang) {
+  const btn = document.getElementById('translate-btn-'+lang);
+  btn.disabled = true; btn.textContent = t('translating');
+  try {
+    const res = await jsonpGet('translateAll', { password: adminPassword, lang });
+    if (res && res.ok) {
+      showToast(t('saveOk'), 'success');
+      if (currentLanguage === lang) { dict = res.dict; applyStaticTranslations(); rerenderVisiblePages(); }
+    } else {
+      showToast(t('wrongPassword'), 'error');
+    }
+  } catch(e) { showToast(t('error'), 'error'); }
+  finally { btn.disabled = false; btn.textContent = t('refreshTranslation'); }
+}
+
+/* =========================================================
+   Toast
+   ========================================================= */
+function showToast(message, type='success') {
+  const toast = document.getElementById('toast');
+  document.getElementById('toast-message').textContent = message;
+  toast.className = `fixed bottom-4 left-1/2 transform -translate-x-1/2 ${type==='success'?'bg-green-500':'bg-red-500'} text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all duration-300 z-50 max-w-[90vw]`;
+  toast.classList.remove('hidden');
+  setTimeout(() => toast.classList.add('hidden'), 3000);
+}
+
+/* =========================================================
+   Init
+   ========================================================= */
+async function bootAfterBranchSelected() {
+  updateBranchSwitchLabel();
+  await loadCatalog();
+  await loadDictionaryFor(currentLanguage);
+  applyStaticTranslations();
+  await syncHistory();
+}
+
+async function init() {
+  document.getElementById('current-date').textContent = formatDate(new Date(), currentLanguage);
+  document.getElementById('filter-date').valueAsDate = new Date();
+  document.getElementById('lang-select').value = currentLanguage;
+
+  if (!currentBranchId || !currentRole) { showBranchPage(); return; }
+  if (currentRole === 'admin') adminPassword = sessionStorage.getItem('admin_pw') || '';
+
+  // ยืนยันสิทธิ์อีกครั้งกับเซิร์ฟเวอร์ (เผื่อรหัสผ่านถูกเปลี่ยนไปแล้ว)
+  try {
+    if (currentRole === 'admin' && !adminPassword) throw new Error('no_admin_session');
+  } catch (e) { showBranchPage(); return; }
+
+  await bootAfterBranchSelected();
+  goHome();
+
+  setInterval(() => { syncHistory(); }, 15000);
+}
+
+init();
+</script>
+
+<!-- รายการสินค้าเริ่มต้น (ใช้ครั้งเดียวตอนกด "นำเข้ารายการเริ่มต้น" ในแอดมิน) -->
+<script>
+const SEED_ITEMS_FULL = [
+{"category":"หน้าเรือ","name":"เส้นเล็ก","unit":"ห่อ"},{"category":"หน้าเรือ","name":"เส้นใหญ่","unit":"ห่อ"},{"category":"หน้าเรือ","name":"เส้นหมี่ขาว","unit":"ก้อน"},
+{"category":"หน้าเรือ","name":"บะหมี่เหลือง","unit":"ห่อ"},{"category":"หน้าเรือ","name":"วุ้นเส้น","unit":"ห่อ"},{"category":"หน้าเรือ","name":"มาม่า","unit":"ก้อน"},
+{"category":"หน้าเรือ","name":"เนื้อสด","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"เนื้อเปื่อย","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"ตับวัว","unit":"กิโลกรัม"},
+{"category":"หน้าเรือ","name":"เลือดวัว","unit":"ขวด"},{"category":"หน้าเรือ","name":"ลูกชิ้นเนื้อ","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"หมูสด","unit":"กิโลกรัม"},
+{"category":"หน้าเรือ","name":"หมูเปื่อย","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"ตับหมู","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"เลือดหมู","unit":"ขวด"},
+{"category":"หน้าเรือ","name":"ลูกชิ้นหมู","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"หัวน้ำเชื้อเนื้อ","unit":"โหล"},{"category":"หน้าเรือ","name":"เครื่องเทศเนื้อ","unit":"โหล"},
+{"category":"หน้าเรือ","name":"หัวน้ำเชื้อหมู","unit":"โหล"},{"category":"หน้าเรือ","name":"เครื่องเทศหมู","unit":"โหล"},{"category":"หน้าเรือ","name":"น้ำปรุงก๋วยเตี๋ยว","unit":"โหล"},
+{"category":"หน้าเรือ","name":"ผักบุ้ง (ตัดแล้ว)","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"ถั่วคั่ว","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"น้ำปลา","unit":"แกนลอน"},
+{"category":"หน้าเรือ","name":"พริกน้ำส้ม","unit":"โหล"},{"category":"หน้าเรือ","name":"พริกคั่ว","unit":"ถัง"},{"category":"หน้าเรือ","name":"ซีอิ๊วดำ","unit":"ขวด"},
+{"category":"หน้าเรือ","name":"ถั่วงอก","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"ถั่วลิสงดิบ","unit":"ถุง"},{"category":"หน้าเรือ","name":"ถ้วยใส่น้ำซุป 9*14 นิ้ว","unit":"แพ็ค"},
+{"category":"หน้าเรือ","name":"ถ้วยใส่ชามก๋วยเตี๋ยว","unit":"แพ็ค"},{"category":"หน้าเรือ","name":"เนื้อสด (ที่หมักแล้ว)","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"เนื้อสด (ที่ยังไม่หมักหรือยังไม่ถูกตัด)","unit":"กิโลกรัม"},
+{"category":"หน้าเรือ","name":"เนื้อเปื่อย (เนื้อสามชั้น)","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"ตับวัว (หมักแล้ว)","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"ตับวัว (ที่ยังไม่ถูกหมักหรือยังไม่ถูกตัด)","unit":"กิโลกรัม"},
+{"category":"หน้าเรือ","name":"กระดูกวัว","unit":"ชิ้น"},{"category":"หน้าเรือ","name":"สันหลังวัว","unit":"ชิ้น"},{"category":"หน้าเรือ","name":"หมูสด (ที่หมักแล้ว)","unit":"กิโลกรัม"},
+{"category":"หน้าเรือ","name":"หมูสด (ที่ยังไม่หมักหรือยังไม่ถูกตัด)","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"หมูเปื่อย (ขั้วตับหมู)","unit":"กิโลกรัม"},{"category":"หน้าเรือ","name":"ตับหมู (หมักแล้ว)","unit":"กิโลกรัม"},
+{"category":"หน้าเรือ","name":"เล้ง","unit":"ชิ้น"},{"category":"หน้าเรือ","name":"ขาตั้ง","unit":"ชิ้น"},{"category":"หน้าเรือ","name":"มันแข็ง","unit":"กิโลกรัม"},
+
+{"category":"อาหารตามสั่ง","name":"ผักสด","is_header":true},
+{"category":"อาหารตามสั่ง","name":"ใบโหระพา","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ผักชีใบเลื่อย","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ผักบุ้ง (ยังไม่ตัด)","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"ใบเตย","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ตะไคร้","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ผักชี","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"รากผักชี","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"กระเทียมไทย","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"กระเทียมจีน","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"ใบกะเพรา","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"คะน้าเล็ก","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ถั่วฝักยาว","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"มะม่วงดิบ","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ต้นหอม","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ชะอม","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"แครอท","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"หัวหอมใหญ่","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"มะเขือเทศ","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"มะละกอ","unit":"ลูก"},{"category":"อาหารตามสั่ง","name":"แตงกวา","unit":"กิโลกรัม/กรัม"},{"category":"อาหารตามสั่ง","name":"มะนาว","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"พริกหยวก","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"พริกชี้แดง","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"พริกแดง","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"พริกเขียว","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"พริกขี้หนู","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"พริกแห้ง","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"ขิง","unit":"กิโลกรัม/กรัม"},{"category":"อาหารตามสั่ง","name":"กระชาย","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"มัน","unit":"ลูก"},
+{"category":"อาหารตามสั่ง","name":"ใบมะกรูด","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"เม็ดพริกไทยพวง","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"หัวไชเท้า","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"ลูกผักชี","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"ผักกาดดอง","unit":"กิโลกรัม"},
+
+{"category":"อาหารตามสั่ง","name":"เครื่องปรุง","is_header":true},
+{"category":"อาหารตามสั่ง","name":"นมจืด","unit":"ขวด"},{"category":"อาหารตามสั่ง","name":"เนยจืด (ก้อน)","unit":"ก้อน"},{"category":"อาหารตามสั่ง","name":"เนยเค็ม (กระปุก)","unit":"กระปุก"},
+{"category":"อาหารตามสั่ง","name":"กะทิ","unit":"ขวด"},{"category":"อาหารตามสั่ง","name":"น้ำตาลปี๊บ","unit":"ก้อน"},{"category":"อาหารตามสั่ง","name":"แป้งมันสัมปะหลัง","unit":"ถุง"},
+{"category":"อาหารตามสั่ง","name":"ผงหมักเนื้อสัตว์","unit":"ซอง"},{"category":"อาหารตามสั่ง","name":"น้ำตาลทรายขาว","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"น้ำตาลทรายแดง (ห่อสีม่วง)","unit":"ถุง"},
+{"category":"อาหารตามสั่ง","name":"เกลือ","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"ดอกเกลือ","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"ซีอิ๊วขาว","unit":"แกนลอน"},
+{"category":"อาหารตามสั่ง","name":"ซอสฝาเขียว (ขวด)","unit":"ขวด"},{"category":"อาหารตามสั่ง","name":"ซอสน้ำมันหอย","unit":"แกนลอน"},{"category":"อาหารตามสั่ง","name":"น้ำส้มสายชู","unit":"แกนลอน"},
+{"category":"อาหารตามสั่ง","name":"น้ำปลาทิพรส(แกนลอน)","unit":"แกนลอน"},{"category":"อาหารตามสั่ง","name":"พริกแกง","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"เหล้าจีน","unit":"ขวด"},
+{"category":"อาหารตามสั่ง","name":"น้ำมันงา","unit":"ขวด"},{"category":"อาหารตามสั่ง","name":"น้ำมันพืช","unit":"ขวด"},{"category":"อาหารตามสั่ง","name":"ผงชูรส","unit":"ถุง"},
+{"category":"อาหารตามสั่ง","name":"รสดีไก่","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"รสดีหมู","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"ซีอิ๊วหวานดำ","unit":"ขวด"},
+{"category":"อาหารตามสั่ง","name":"น้ำจิ้มลูกชิ้น","unit":"ถุง"},
+
+{"category":"อาหารตามสั่ง","name":"เนื้อสัตว์","is_header":true},
+{"category":"อาหารตามสั่ง","name":"ซี่โครงไก่","unit":"ตัว"},{"category":"อาหารตามสั่ง","name":"อกไก่","unit":"กิโลกรัม/กรัม"},{"category":"อาหารตามสั่ง","name":"ไก่ตัว","unit":"ตัว"},
+{"category":"อาหารตามสั่ง","name":"สันในไก่","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ปีกไก่","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ปลาหมึก","unit":"กิโลกรัม/กรัม"},
+{"category":"อาหารตามสั่ง","name":"กุ้ง","unit":"กิโลกรัม/กรัม"},{"category":"อาหารตามสั่ง","name":"มันแข็ง","unit":"กิโลกรัม"},{"category":"อาหารตามสั่ง","name":"ขาหมู","unit":"กิโลกรัม"},
+{"category":"อาหารตามสั่ง","name":"ไข่ไก่","unit":"ฟอง"},{"category":"อาหารตามสั่ง","name":"ไข่เป็ด","unit":"ฟอง"},{"category":"อาหารตามสั่ง","name":"ไข่เยี่ยวม้า","unit":"ฟอง"},
+
+{"category":"อาหารตามสั่ง","name":"ข้าว","is_header":true},
+{"category":"อาหารตามสั่ง","name":"ข้าวตราสามงู","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"ข้าวตรามังกร","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"ข้าวสารทำข้าวผัด","unit":"ถุง"},
+{"category":"อาหารตามสั่ง","name":"ข้าวเหนียว","unit":"ถุง"},{"category":"อาหารตามสั่ง","name":"สปาเก็ตตี้","unit":"กิโลกรัม/กรัม"},
+
+{"category":"เด็กเสิร์ฟ","name":"น้ำเปล่า","unit":"ขวด/แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"น้ำโค้ก","unit":"ขวด/ลัง"},{"category":"เด็กเสิร์ฟ","name":"น้ำแดง","unit":"ขวด/ลัง"},
+{"category":"เด็กเสิร์ฟ","name":"น้ำเขียว","unit":"ขวด/ลัง"},{"category":"เด็กเสิร์ฟ","name":"น้ำส้ม","unit":"ขวด/ลัง"},{"category":"เด็กเสิร์ฟ","name":"น้ำสไปร์ท Sprite","unit":"ขวด/ลัง"},
+{"category":"เด็กเสิร์ฟ","name":"โค้กซีโร่","unit":"ขวด/แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"น้ำเก๊กฮวย","unit":"ถุง"},{"category":"เด็กเสิร์ฟ","name":"น้ำบ๊วย","unit":"ถุง"},
+{"category":"เด็กเสิร์ฟ","name":"น้ำกระเจี๊ยบ","unit":"ถุง"},{"category":"เด็กเสิร์ฟ","name":"โอเลี้ยง","unit":"ถุง"},{"category":"เด็กเสิร์ฟ","name":"น้ำชาเขียว","unit":"ถุง"},
+{"category":"เด็กเสิร์ฟ","name":"น้ำชาไทย","unit":"ถุง"},{"category":"เด็กเสิร์ฟ","name":"น้ำชามะนาว","unit":"ถุง"},{"category":"เด็กเสิร์ฟ","name":"น้ำลำไย","unit":"ถุง"},
+
+{"category":"เด็กเสิร์ฟ","name":"ของหวาน และ เครื่องเคียง","is_header":true},
+{"category":"เด็กเสิร์ฟ","name":"ไอติมขนมปัง ช็อกโกแลต","unit":"ไม้"},{"category":"เด็กเสิร์ฟ","name":"ไอติมกรวยคอตตอนแคนดี้","unit":"โคน"},
+{"category":"เด็กเสิร์ฟ","name":"ไอติมถ้วย ช็อกโกแลต","unit":"ถ้วย"},{"category":"เด็กเสิร์ฟ","name":"ไอติมถ้วย วานิลา","unit":"ถ้วย"},
+{"category":"เด็กเสิร์ฟ","name":"ไอติมถ้วย กะทิ","unit":"ถ้วย"},{"category":"เด็กเสิร์ฟ","name":"ไอติมถ้วย มะนาว","unit":"ถ้วย"},
+{"category":"เด็กเสิร์ฟ","name":"ไอติมถั่วดำ","unit":"ไม้"},{"category":"เด็กเสิร์ฟ","name":"ไอติมเผือก","unit":"ไม้"},{"category":"เด็กเสิร์ฟ","name":"ไอติมทุเรียน","unit":"ไม้"},
+{"category":"เด็กเสิร์ฟ","name":"ไอติมข้าวโพด","unit":"ไม้"},
+
+{"category":"เด็กเสิร์ฟ","name":"นมข้นหวาน","unit":"ถุง"},{"category":"เด็กเสิร์ฟ","name":"นมจืดกระป๋อง","unit":"กระป๋อง"},{"category":"เด็กเสิร์ฟ","name":"ครีมเทียม","unit":"ถุง"},
+
+{"category":"เด็กเสิร์ฟ","name":"ภาชนะบรรจุ","is_header":true},
+{"category":"เด็กเสิร์ฟ","name":"ถ้วยใส่ก๋วยเตี๋ยว","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"กล่องใส่ข้าวอาหารตามสั่ง 1 ช่อง","unit":"แพ็ค"},
+{"category":"เด็กเสิร์ฟ","name":"กล่องใส่ข้าวอาหารตามสั่ง 2 ช่อง","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"กล่องใส่ขนมถ้วย","unit":"แพ็ค"},
+{"category":"เด็กเสิร์ฟ","name":"ถุงน้ำจิ้ม 2.5*4","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"ถุงร้อน 4*6","unit":"แพ็ค"},
+{"category":"เด็กเสิร์ฟ","name":"ถุงร้อน 5*8","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"ถุงร้อน 6*9","unit":"แพ็ค"},
+{"category":"เด็กเสิร์ฟ","name":"ถุงใส่เนื้อหมัก 7*11","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"ถุงน้ำหวาน 10*15","unit":"แพ็ค"},
+{"category":"เด็กเสิร์ฟ","name":"ถุงหูหิ้วเล็ก 6*14","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"ถุงหูหิ้วกลาง 8*16","unit":"แพ็ค"},
+{"category":"เด็กเสิร์ฟ","name":"ถุงหูหิ้วใหญ่ 9*18","unit":"แพ็ค"},
+
+{"category":"เด็กเสิร์ฟ","name":"หนังยาง","unit":"ถุง"},{"category":"เด็กเสิร์ฟ","name":"ตะเกียบ","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"ช้อนพลาสติก","unit":"แพ็ค"},
+{"category":"เด็กเสิร์ฟ","name":"แก้ว 20oz","unit":"แถว"},{"category":"เด็กเสิร์ฟ","name":"ฝาแก้ว 20oz","unit":"แถว"},{"category":"เด็กเสิร์ฟ","name":"ถุงใส่แก้ว 20 oz","unit":"แพ็ค"},
+{"category":"เด็กเสิร์ฟ","name":"แก้ว 30oz","unit":"แถว"},{"category":"เด็กเสิร์ฟ","name":"ฝาแก้ว 30oz","unit":"แถว"},{"category":"เด็กเสิร์ฟ","name":"ถุงใส่แก้ว 32 oz","unit":"แพ็ค"},
+
+{"category":"เด็กเสิร์ฟ","name":"พลาสติกแร๊ปอาหาร","unit":"ม้วน"},{"category":"เด็กเสิร์ฟ","name":"หลอดสั้น","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"หลอดยาว","unit":"แพ็ค"},
+
+{"category":"เด็กเสิร์ฟ","name":"อื่น ๆ","is_header":true},
+{"category":"เด็กเสิร์ฟ","name":"ทิชชู่ตั้งโต๊ะ","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"ทิชชู่ม้วนใหญ่","unit":"ม้วน"},{"category":"เด็กเสิร์ฟ","name":"น้ำปลาขวดเล็ก","unit":"ขวด"},
+{"category":"เด็กเสิร์ฟ","name":"หน้ากากอนามัย","unit":"กล่อง"},{"category":"เด็กเสิร์ฟ","name":"หน้ากากอนามัยแบบซอง","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"ถุงมือพลาสติก","unit":"กล่อง"},
+{"category":"เด็กเสิร์ฟ","name":"ถุงมือสีดำ","unit":"กล่อง"},{"category":"เด็กเสิร์ฟ","name":"กระดาษร้อน เครื่องปริ้น","unit":"ม้วน"},{"category":"เด็กเสิร์ฟ","name":"ไม้จิ้มฟัน","unit":"กระปุก"},
+{"category":"เด็กเสิร์ฟ","name":"ถุงดำหลังครัว","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"ถุงดำหน้าเรือ","unit":"แพ็ค"},{"category":"เด็กเสิร์ฟ","name":"น้ำยาล้างจาน","unit":"แกนลอน"},
+{"category":"เด็กเสิร์ฟ","name":"สก็อตไบร์ท (จาน)","unit":"ชิ้น"},{"category":"เด็กเสิร์ฟ","name":"สก็อตไบร์ท (แก้ว)","unit":"ชิ้น"},{"category":"เด็กเสิร์ฟ","name":"ผงซักฟอก","unit":"ถุง"},
+{"category":"เด็กเสิร์ฟ","name":"แผ่นดักแมลงวัน","unit":"กล่อง"},{"category":"เด็กเสิร์ฟ","name":"น้ำยาไล่แมลงวัน","unit":"แกนลอน"},{"category":"เด็กเสิร์ฟ","name":"หมวกคลุมผม","unit":"แพ็ค"},
+{"category":"เด็กเสิร์ฟ","name":"ซอสมะเขือเทศ","unit":"ขวด"},{"category":"เด็กเสิร์ฟ","name":"ซอสพริก","unit":"ขวด"},{"category":"เด็กเสิร์ฟ","name":"ซอสแมคกี้","unit":"ขวด"}
+];
+</script>
+</body>
+</html>
